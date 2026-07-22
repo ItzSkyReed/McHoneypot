@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McHoneypot.Core", "McHoneypot.Core\McHoneypot.Core.csproj", "{2398B80B-7710-4A22-9A69-C1EC9E919792}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McHoneypot.Application", "McHoneypot.Application\McHoneypot.Application.csproj", "{E2A6D27C-8943-4F3F-8660-C6D1B2C0136D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McHoneypot.Adapters", "McHoneypot.Adapters\McHoneypot.Adapters.csproj", "{6BFE9D96-0D5B-48C2-8CC5-2BAE0D6FD01F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McHoneypot.Infrastructure", "McHoneypot.Infrastructure\McHoneypot.Infrastructure.csproj", "{8CF16FB5-E366-4D50-A950-57AEB1D703F1}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2398B80B-7710-4A22-9A69-C1EC9E919792}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2398B80B-7710-4A22-9A69-C1EC9E919792}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2398B80B-7710-4A22-9A69-C1EC9E919792}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2398B80B-7710-4A22-9A69-C1EC9E919792}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2A6D27C-8943-4F3F-8660-C6D1B2C0136D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2A6D27C-8943-4F3F-8660-C6D1B2C0136D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2A6D27C-8943-4F3F-8660-C6D1B2C0136D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2A6D27C-8943-4F3F-8660-C6D1B2C0136D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6BFE9D96-0D5B-48C2-8CC5-2BAE0D6FD01F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6BFE9D96-0D5B-48C2-8CC5-2BAE0D6FD01F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6BFE9D96-0D5B-48C2-8CC5-2BAE0D6FD01F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6BFE9D96-0D5B-48C2-8CC5-2BAE0D6FD01F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8CF16FB5-E366-4D50-A950-57AEB1D703F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8CF16FB5-E366-4D50-A950-57AEB1D703F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8CF16FB5-E366-4D50-A950-57AEB1D703F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8CF16FB5-E366-4D50-A950-57AEB1D703F1}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
