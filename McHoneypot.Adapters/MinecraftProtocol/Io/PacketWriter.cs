@@ -16,6 +16,10 @@ public static class PacketWriter
             case StatusResponsePacket statusPacket:
                 payloadStream.WriteMinecraftString(statusPacket.JsonResponse);
                 break;
+
+            case PongResponsePacket pongPacket:
+                payloadStream.WriteLong(pongPacket.Payload);
+                break;
         }
 
 

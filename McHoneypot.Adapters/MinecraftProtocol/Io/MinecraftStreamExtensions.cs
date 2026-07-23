@@ -1,10 +1,11 @@
-﻿using System.Text;
+﻿using System.Buffers.Binary;
+using System.Text;
 using McHoneypot.Adapters.MinecraftProtocol.Types;
 
 namespace McHoneypot.Adapters.MinecraftProtocol.Io;
 
 /// <summary>
-/// Расширения для Stream для чтения специфичных типов протокола Minecraft.
+/// Extension for Stream to read Minecraft specific protocol.
 /// </summary>
 public static class MinecraftStreamExtensions
 {
@@ -24,7 +25,7 @@ public static class MinecraftStreamExtensions
                 : Encoding.UTF8.GetString(stringBytes);
         }
 
-        public ushort ReadBigEndianUShort()
+        public ushort ReadUShort()
         {
             var buffer = new byte[2];
             if (stream.Read(buffer, 0, 2) != 2)
@@ -48,11 +49,16 @@ public static class MinecraftStreamExtensions
         {
             var stringBytes = Encoding.UTF8.GetBytes(value);
 
-            // Сначала пишем длину строки как VarInt
             stream.WriteVarInt(stringBytes.Length);
 
-            // Затем сами байты
             stream.Write(stringBytes, 0, stringBytes.Length);
+        }
+
+        public void WriteLong(long value)
+        {
+            Span<byte> buffer = stackalloc byte[8];
+            BinaryPrimitives.WriteInt64BigEndian(buffer, value);
+            stream.Write(buffer);
         }
     }
 }

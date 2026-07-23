@@ -1,9 +1,27 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        
+        <PublishAot>true</PublishAot>
+
+        <InvariantGlobalization>true</InvariantGlobalization>
+
+        <DebuggerSupport>false</DebuggerSupport>
+        
+        <EventSourceSupport>false</EventSourceSupport>
+        
+        <StripSymbols>true</StripSymbols>
+    </PropertyGroup>
+    
+    <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\McHoneypot.Adapters\McHoneypot.Adapters.csproj" />
+    </ItemGroup>
 
 </Project>

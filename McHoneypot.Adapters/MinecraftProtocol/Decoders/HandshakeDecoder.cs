@@ -12,7 +12,7 @@ public class HandshakeDecoder : IPacketDecoder
         {
             ProtocolVersion = stream.ReadVarInt(),
             ServerAddress = stream.ReadMinecraftString(255),
-            ServerPort = stream.ReadBigEndianUShort(),
+            ServerPort = stream.ReadUShort(),
             Intent = stream.ReadVarInt()
         };
     }
