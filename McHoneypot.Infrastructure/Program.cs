@@ -4,6 +4,8 @@ using System.Text.Json;
 using McHoneypot.Adapters.Controllers;
 using McHoneypot.Core.Models.Configuration;
 using McHoneypot.Infrastructure.Configuration;
+using McHoneypot.Infrastructure.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace McHoneypot.Infrastructure;
 
@@ -11,10 +13,20 @@ internal static class Program
 {
     private const string ConfigPath = "config.json";
     private static ServerConfig _config = null!;
+    private static ILogger _logger = null!;
 
     private static async Task Main()
     {
-        Console.WriteLine("Initializing Minecraft Honeypot...");
+        using var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(LogLevel.Information);
+        });
+
+        _logger = loggerFactory.CreateLogger("McHoneypot");
+
+        ServerLogs.Initializing(_logger);
+
         LoadConfiguration();
 
         var bindAddress = IPAddress.Parse(_config.BindAddress);
@@ -23,18 +35,20 @@ internal static class Program
         try
         {
             listener.Start();
-            Console.WriteLine($"[+] Server started at {_config.BindAddress}:{_config.Port}");
-            Console.WriteLine($"[+] Protocol Mode: {_config.ProtocolBehavior}");
+
+            ServerLogs.ServerStarted(_logger, _config.BindAddress, _config.Port);
+            ServerLogs.ProtocolMode(_logger, _config.ProtocolBehavior.ToString());
 
             while (true)
             {
                 var client = await listener.AcceptTcpClientAsync();
-                _ = Task.Run(() => HandleClientAsync(client));
+
+                _ = HandleClientAsync(client);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[!] Critical Error: {ex.Message}");
+            ServerLogs.CriticalError(_logger, ex);
         }
         finally
         {
@@ -58,7 +72,7 @@ internal static class Program
         }
         else
         {
-            Console.WriteLine($"[!] File {ConfigPath} not found. Creating new one...");
+            ServerLogs.ConfigNotFound(_logger, ConfigPath);
             _config = new ServerConfig();
 
 
@@ -67,32 +81,32 @@ internal static class Program
         }
     }
 
-    private static void HandleClientAsync(TcpClient client)
+    private static async Task HandleClientAsync(TcpClient client)
     {
         var clientIp = client.Client.RemoteEndPoint?.ToString() ?? "Unknown";
-        Console.WriteLine($"[>] Connection from: {clientIp}");
+        ServerLogs.ClientConnected(_logger, clientIp);
 
         try
         {
             client.ReceiveTimeout = _config.TimeoutMs;
             client.SendTimeout = _config.TimeoutMs;
 
-            using var stream = client.GetStream();
-
+            await using var stream = client.GetStream();
             var handler = new ClientConnectionHandler(_config);
-            handler.HandleStream(stream);
+
+            await handler.HandleStreamAsync(stream);
         }
         catch (EndOfStreamException)
         {
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[X] Error clientIp: {ex.Message}");
+            ServerLogs.ClientError(_logger, ex, clientIp);
         }
         finally
         {
             client.Close();
-            Console.WriteLine($"[<] Disconnected: {clientIp}");
+            ServerLogs.ClientDisconnected(_logger, clientIp);
         }
     }
 }

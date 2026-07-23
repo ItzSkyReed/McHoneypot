@@ -1,4 +1,5 @@
-﻿using System.Buffers.Binary;
+﻿using System.Buffers;
+using System.Buffers.Binary;
 using System.Text;
 using McHoneypot.Adapters.MinecraftProtocol.Types;
 
@@ -14,29 +15,72 @@ public static class MinecraftStreamExtensions
         public string ReadMinecraftString(int maxLength = 255)
         {
             int length = VarInt.ReadFrom(stream);
-
             if (length > maxLength * 4 || length < 0)
                 throw new FormatException($"String too long: {length} bytes.");
 
-            var stringBytes = new byte[length];
-            var read = stream.Read(stringBytes, 0, length);
-            return read != length
-                ? throw new EndOfStreamException("Failed to read the string.")
-                : Encoding.UTF8.GetString(stringBytes);
+            byte[]? rentedBuffer = null;
+            var stringSpan = length <= 1024
+                ? stackalloc byte[length]
+                : (rentedBuffer = ArrayPool<byte>.Shared.Rent(length)).AsSpan(0, length);
+
+            try
+            {
+                stream.ReadExactly(stringSpan);
+                return Encoding.UTF8.GetString(stringSpan);
+            }
+            finally
+            {
+                if (rentedBuffer != null)
+                    ArrayPool<byte>.Shared.Return(rentedBuffer);
+            }
         }
 
         public ushort ReadUShort()
         {
-            var buffer = new byte[2];
-            if (stream.Read(buffer, 0, 2) != 2)
-                throw new EndOfStreamException("Unable to read ushort from stream.");
+            Span<byte> buffer = stackalloc byte[2];
+            stream.ReadExactly(buffer);
 
-            return (ushort)((buffer[0] << 8) | buffer[1]);
+            return BinaryPrimitives.ReadUInt16BigEndian(buffer);
         }
 
         public VarInt ReadVarInt()
         {
             return VarInt.ReadFrom(stream);
+        }
+
+        public  async ValueTask<int> ReadVarIntAsync(CancellationToken cancellationToken = default)
+        {
+            var numRead = 0;
+            var result = 0;
+
+            var buffer = ArrayPool<byte>.Shared.Rent(1);
+
+            try
+            {
+                byte read;
+                do
+                {
+                    var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, 1), cancellationToken);
+
+                    if (bytesRead == 0)
+                        throw new EndOfStreamException("Unexpected end of stream while reading VarInt.");
+
+                    read = buffer[0];
+                    var valuePart = read & 0x7F;
+                    result |= valuePart << (7 * numRead);
+                    numRead++;
+
+                    if (numRead > 5)
+                        throw new FormatException("VarInt is too long (more than 5 bytes). Attack possible.");
+
+                } while ((read & 0x80) != 0);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+
+            return result;
         }
 
         public void WriteVarInt(int value)

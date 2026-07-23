@@ -1,4 +1,5 @@
-﻿using McHoneypot.Adapters.MinecraftProtocol;
+﻿using System.Buffers;
+using McHoneypot.Adapters.MinecraftProtocol;
 using McHoneypot.Adapters.MinecraftProtocol.Io;
 using McHoneypot.Adapters.MinecraftProtocol.Packets;
 using McHoneypot.Adapters.MinecraftProtocol.Packets.Clientbound;
@@ -8,47 +9,41 @@ using McHoneypot.Core.Models.Configuration;
 
 namespace McHoneypot.Adapters.Controllers;
 
-public class ClientConnectionHandler
+public class ClientConnectionHandler(ServerConfig config)
 {
-    public ClientConnectionHandler(ServerConfig config)
-    {
-        _config = config;
-        _clientProtocolVersion = config.FixedProtocolVersion;
-    }
-
-    private readonly ServerConfig _config;
     private ConnectionState _currentState = ConnectionState.Handshaking;
-    private readonly PacketRegistry _registry = new();
 
-    private int _clientProtocolVersion;
+    private int _clientProtocolVersion = config.FixedProtocolVersion;
 
-    public void HandleStream(Stream stream)
+    public async Task HandleStreamAsync(Stream stream, CancellationToken cancellationToken = default)
     {
         try
         {
             while (true)
             {
-                int packetLength = stream.ReadVarInt();
+                var packetLength = await stream.ReadVarIntAsync(cancellationToken);
 
                 if (packetLength > 2097151) throw new InvalidDataException("Packet too large");
 
-                var packetBuffer = new byte[packetLength];
-                stream.ReadExactly(packetBuffer, 0, packetLength);
-
-                using var memoryStream = new MemoryStream(packetBuffer);
-
-                int packetId = memoryStream.ReadVarInt();
-
-                var decoder = _registry.GetDecoder(_currentState, packetId);
-
-                if (decoder == null)
+                var packetBuffer = ArrayPool<byte>.Shared.Rent(packetLength);
+                try
                 {
-                    return;
+                    await stream.ReadExactlyAsync(packetBuffer, 0, packetLength, cancellationToken);
+
+                    var packetData = new ReadOnlySpan<byte>(packetBuffer, 0, packetLength);
+                    var reader = new PacketReader(packetData);
+
+                    var packetId = reader.ReadVarInt();
+                    var decoder = PacketRegistry.GetDecoder(_currentState, packetId);
+                    if (decoder == null) return;
+
+                    var packet = decoder.Decode(ref reader);
+                    await ProcessPacketAsync(packet, stream, cancellationToken);
                 }
-
-                var packet = decoder.Decode(memoryStream);
-
-                ProcessPacket(packet, stream);
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(packetBuffer);
+                }
             }
         }
         catch (EndOfStreamException)
@@ -56,23 +51,22 @@ public class ClientConnectionHandler
         }
     }
 
-    private void ProcessPacket(IServerboundPacket packet, Stream networkStream)
+    private async Task ProcessPacketAsync(IServerboundPacket packet, Stream networkStream, CancellationToken cancellationToken = default)
     {
         switch (packet)
         {
             case HandshakePacket handshake:
                 _currentState = (ConnectionState)handshake.Intent;
 
-                _clientProtocolVersion = _config.ProtocolBehavior switch
+                _clientProtocolVersion = config.ProtocolBehavior switch
                 {
                     ProtocolMode.Chameleon => handshake.ProtocolVersion,
-                    ProtocolMode.Fixed => _config.FixedProtocolVersion,
+                    ProtocolMode.Fixed => config.FixedProtocolVersion,
                     _ => _clientProtocolVersion
                 };
-
                 break;
 
-            case StatusRequestPacket _:
+            case StatusRequestPacket:
                 var validJson = $$"""
                                   {
                                       "version": {
@@ -93,12 +87,12 @@ public class ClientConnectionHandler
                                   """;
 
                 var responsePacket = new StatusResponsePacket(validJson);
-                PacketWriter.SendPacket(networkStream, responsePacket);
+                await PacketWriter.SendPacketAsync(networkStream, responsePacket, cancellationToken);
                 break;
 
             case PingRequestPacket ping:
                 var pongPacket = new PongResponsePacket(ping.Payload);
-                PacketWriter.SendPacket(networkStream, pongPacket);
+                await PacketWriter.SendPacketAsync(networkStream, pongPacket, cancellationToken);
                 break;
         }
     }

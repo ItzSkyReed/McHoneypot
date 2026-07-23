@@ -1,55 +1,54 @@
-﻿
-using McHoneypot.Adapters.MinecraftProtocol.Packets;
+﻿using System.Buffers.Binary;
+using System.Text;
 
-namespace McHoneypot.Adapters.MinecraftProtocol.Io
+namespace McHoneypot.Adapters.MinecraftProtocol.Io;
+
+public ref struct PacketReader(ReadOnlySpan<byte> buffer)
 {
-    public static class PacketReader
+    private readonly ReadOnlySpan<byte> _buffer = buffer;
+    public int Position { get; private set; } = 0;
+
+    public int ReadVarInt()
     {
-        private const int MaxPacketLength = 2097151;
-
-        public static RawPacket ReadNextPacket(Stream stream)
+        var numRead = 0;
+        var result = 0;
+        byte read;
+        do
         {
-            int packetLength = stream.ReadVarInt();
+            read = _buffer[Position++];
+            var valuePart = read & 0x7F;
+            result |= valuePart << (7 * numRead);
+            numRead++;
+            if (numRead > 5)
+                throw new FormatException("VarInt is too long.");
+        } while ((read & 0x80) != 0);
 
-            switch (packetLength)
-            {
-                case 0:
-                    throw new InvalidDataException("Empty packet sent (Length = 0).");
-                case > MaxPacketLength:
-                    throw new InvalidDataException($"Packet too large! {packetLength} bytes claimed. Dropping connection.");
-            }
+        return result;
+    }
 
-            // Read the Packet ID.
-            // Important: the size of the VarInt for the ID is included in the total packet length (Length)!
-            // Therefore, we need to calculate how many bytes the Packet ID itself occupies.
+    public ushort ReadUShort()
+    {
+        var value = BinaryPrimitives.ReadUInt16BigEndian(_buffer.Slice(Position, 2));
+        Position += 2;
+        return value;
+    }
 
-            // Remember the position (if this is a NetworkStream, we can't use Position,
-            // so we'll read the Packet ID byte by byte or use ReadVarInt,
-            // but we need to know its length in bytes).
+    public string ReadMinecraftString(int maxLength = 255)
+    {
+        var length = ReadVarInt();
+        if (length > maxLength * 4 || length < 0)
+            throw new FormatException($"String too long: {length} bytes.");
 
-            // To avoid complicating the code by counting bytes, we'll read the entire Payload into memory.
-            // PacketLength is (ID size) + (Data size).
-            var packetBuffer = new byte[packetLength];
-            var totalRead = 0;
+        var stringSpan = _buffer.Slice(Position, length);
+        Position += length;
 
-            while (totalRead < packetLength)
-            {
-                var read = stream.Read(packetBuffer, totalRead, packetLength - totalRead);
-                if (read == 0) throw new EndOfStreamException();
-                totalRead += read;
-            }
+        return Encoding.UTF8.GetString(stringSpan);
+    }
 
-
-            using var memoryStream = new MemoryStream(packetBuffer);
-
-            int packetId = memoryStream.ReadVarInt();
-
-            // How many bytes are left? This is our Data
-            var dataLength = (int)(memoryStream.Length - memoryStream.Position);
-            var data = new byte[dataLength];
-            memoryStream.ReadExactly(data, 0, dataLength);
-
-            return new RawPacket(packetLength, packetId, data);
-        }
+    public long ReadLong()
+    {
+        var value = BinaryPrimitives.ReadInt64BigEndian(_buffer.Slice(Position, 8));
+        Position += 8;
+        return value;
     }
 }

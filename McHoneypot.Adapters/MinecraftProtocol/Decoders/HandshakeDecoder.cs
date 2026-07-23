@@ -6,14 +6,14 @@ namespace McHoneypot.Adapters.MinecraftProtocol.Decoders;
 
 public class HandshakeDecoder : IPacketDecoder
 {
-    public IServerboundPacket Decode(Stream stream)
+    public IServerboundPacket Decode(ref PacketReader reader)
     {
         return new HandshakePacket
         {
-            ProtocolVersion = stream.ReadVarInt(),
-            ServerAddress = stream.ReadMinecraftString(255),
-            ServerPort = stream.ReadUShort(),
-            Intent = stream.ReadVarInt()
+            ProtocolVersion = reader.ReadVarInt(),
+            ServerAddress = reader.ReadMinecraftString(255),
+            ServerPort = reader.ReadUShort(),
+            Intent = reader.ReadVarInt()
         };
     }
 }
