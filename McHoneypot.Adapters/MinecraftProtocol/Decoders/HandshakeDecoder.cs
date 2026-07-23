@@ -4,8 +4,10 @@ using McHoneypot.Adapters.MinecraftProtocol.Packets.Serverbound;
 
 namespace McHoneypot.Adapters.MinecraftProtocol.Decoders;
 
-public class HandshakeDecoder : IPacketDecoder
+public sealed class HandshakeDecoder : IPacketDecoder
 {
+    public static readonly HandshakeDecoder Instance = new();
+
     public IServerboundPacket Decode(ref PacketReader reader)
     {
         return new HandshakePacket

@@ -1,5 +1,5 @@
 ﻿namespace McHoneypot.Adapters.MinecraftProtocol.Packets.Serverbound;
 
-public class StatusRequestPacket : IServerboundPacket
+public sealed class StatusRequestPacket : IServerboundPacket
 {
 }

@@ -10,6 +10,8 @@ public class ServerConfig
     public ProtocolMode ProtocolBehavior { get; set; } = ProtocolMode.Chameleon;
     public int FixedProtocolVersion { get; set; } = 765; // 1.20.4 by default
 
+    public int MaxClientPacketLength { get; set; } = 65536;
+
     // For future
     // public TrapConfig Traps { get; set; } = new TrapConfig();
 }

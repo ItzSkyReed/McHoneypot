@@ -1,67 +1,76 @@
 ﻿using System.Buffers;
+using System.Buffers.Binary;
+using System.Text;
 using McHoneypot.Adapters.MinecraftProtocol.Packets;
 using McHoneypot.Adapters.MinecraftProtocol.Packets.Clientbound;
 using McHoneypot.Adapters.MinecraftProtocol.Types;
 
 namespace McHoneypot.Adapters.MinecraftProtocol.Io;
 
-public static class PacketWriter
+public ref struct PacketWriter(Span<byte> buffer)
 {
-    public static void SendPacket(Stream networkStream, IClientboundPacket packet)
+    private readonly Span<byte> _buffer = buffer;
+    public int Position { get; private set; } = 0;
+
+    public void WriteVarInt(int value)
     {
-        using var payloadStream = new MemoryStream();
-        payloadStream.WriteVarInt(packet.PacketId);
-        switch (packet)
+        var val = (uint)value;
+        do
         {
-            case StatusResponsePacket statusPacket:
-                payloadStream.WriteMinecraftString(statusPacket.JsonResponse);
-                break;
-            case PongResponsePacket pongPacket:
-                payloadStream.WriteLong(pongPacket.Payload);
-                break;
-        }
-
-        ReadOnlySpan<byte> payloadSpan = payloadStream.GetBuffer().AsSpan(0, (int)payloadStream.Length);
-
-        networkStream.WriteVarInt(payloadSpan.Length);
-        networkStream.Write(payloadSpan);
-        networkStream.Flush();
+            var temp = (byte)(val & 0x7F);
+            val >>= 7;
+            if (val != 0)
+            {
+                temp |= 0x80;
+            }
+            _buffer[Position++] = temp;
+        } while (val != 0);
     }
 
-    public static async Task SendPacketAsync(Stream networkStream, IClientboundPacket packet, CancellationToken cancellationToken = default)
+    public void WriteLong(long value)
     {
-        using var payloadStream = new MemoryStream();
-        payloadStream.WriteVarInt(packet.PacketId);
+        BinaryPrimitives.WriteInt64BigEndian(_buffer.Slice(Position, 8), value);
+        Position += 8;
+    }
+
+    public static int GetVarIntSize(int value)
+    {
+        var size = 0;
+        var val = (uint)value;
+        do
+        {
+            val >>= 7;
+            size++;
+        } while (val != 0);
+        return size;
+    }
+
+    public static int GetMinecraftStringSize(string value)
+    {
+        var byteCount = Encoding.UTF8.GetByteCount(value);
+        return GetVarIntSize(byteCount) + byteCount;
+    }
+
+    public void WriteMinecraftString(string value)
+    {
+        var byteCount = Encoding.UTF8.GetByteCount(value);
+        WriteVarInt(byteCount);
+        Encoding.UTF8.GetBytes(value, _buffer.Slice(Position));
+        Position += byteCount;
+    }
+
+    public void WritePacketPayload(IClientboundPacket packet)
+    {
+        WriteVarInt(packet.PacketId);
 
         switch (packet)
         {
             case StatusResponsePacket statusPacket:
-                payloadStream.WriteMinecraftString(statusPacket.JsonResponse);
+                WriteMinecraftString(statusPacket.JsonResponse);
                 break;
             case PongResponsePacket pongPacket:
-                payloadStream.WriteLong(pongPacket.Payload);
+                WriteLong(pongPacket.Payload);
                 break;
         }
-
-        var payloadBuffer = payloadStream.GetBuffer();
-        var payloadLength = (int)payloadStream.Length;
-
-
-        var lengthBuffer = ArrayPool<byte>.Shared.Rent(5);
-        try
-        {
-            var packetLengthVarInt = new VarInt(payloadLength);
-            packetLengthVarInt.TryWrite(lengthBuffer, out var lengthBytesWritten);
-
-            await networkStream.WriteAsync(lengthBuffer.AsMemory(0, lengthBytesWritten), cancellationToken);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(lengthBuffer);
-        }
-
-        await networkStream.WriteAsync(payloadBuffer.AsMemory(0, payloadLength), cancellationToken);
-
-        await networkStream.FlushAsync(cancellationToken);
     }
 }

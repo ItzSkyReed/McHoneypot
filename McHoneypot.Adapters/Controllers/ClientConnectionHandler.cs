@@ -9,7 +9,7 @@ using McHoneypot.Core.Models.Configuration;
 
 namespace McHoneypot.Adapters.Controllers;
 
-public class ClientConnectionHandler(ServerConfig config)
+public sealed class ClientConnectionHandler(ServerConfig config)
 {
     private ConnectionState _currentState = ConnectionState.Handshaking;
 
@@ -23,7 +23,7 @@ public class ClientConnectionHandler(ServerConfig config)
             {
                 var packetLength = await stream.ReadVarIntAsync(cancellationToken);
 
-                if (packetLength > 2097151) throw new InvalidDataException("Packet too large");
+                if (packetLength > config.MaxClientPacketLength) throw new InvalidDataException("Packet too large");
 
                 var packetBuffer = ArrayPool<byte>.Shared.Rent(packetLength);
                 try
@@ -87,13 +87,51 @@ public class ClientConnectionHandler(ServerConfig config)
                                   """;
 
                 var responsePacket = new StatusResponsePacket(validJson);
-                await PacketWriter.SendPacketAsync(networkStream, responsePacket, cancellationToken);
+                await SendPacketAsync(networkStream, responsePacket, cancellationToken);
                 break;
 
             case PingRequestPacket ping:
                 var pongPacket = new PongResponsePacket(ping.Payload);
-                await PacketWriter.SendPacketAsync(networkStream, pongPacket, cancellationToken);
+                await SendPacketAsync(networkStream, pongPacket, cancellationToken);
                 break;
+        }
+    }
+
+    private async Task SendPacketAsync(Stream networkStream, IClientboundPacket packet, CancellationToken cancellationToken)
+    {
+        var payloadSize = PacketWriter.GetVarIntSize(packet.PacketId);
+
+        payloadSize += packet switch
+        {
+            StatusResponsePacket statusPacket => PacketWriter.GetMinecraftStringSize(statusPacket.JsonResponse),
+            PongResponsePacket => 8, // Long всегда занимает 8 байт
+            _ => throw new NotSupportedException($"Unknown packet type: {packet.GetType().Name}")
+        };
+
+        var totalRequiredSize = payloadSize + 5;
+
+        var buffer = ArrayPool<byte>.Shared.Rent(totalRequiredSize);
+
+        try
+        {
+            var payloadSpan = buffer.AsSpan(5);
+            var writer = new PacketWriter(payloadSpan);
+            writer.WritePacketPayload(packet);
+
+            var headerWriter = new PacketWriter(buffer.AsSpan());
+            headerWriter.WriteVarInt(payloadSize);
+            var headerLength = headerWriter.Position;
+
+
+            if (headerLength < 5)
+                payloadSpan[..payloadSize].CopyTo(buffer.AsSpan(headerLength));
+
+            var finalPacketSize = headerLength + payloadSize;
+            await networkStream.WriteAsync(buffer.AsMemory(0, finalPacketSize), cancellationToken);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 

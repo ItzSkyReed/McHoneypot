@@ -27,4 +27,7 @@ public static partial class ServerLogs
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Critical, Message = "[!] Critical Error during server execution.")]
     public static partial void CriticalError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "[!] Dropped oversized packet from {ClientIp}: requested {Length} bytes (Max: {MaxLength})")]
+    public static partial void OversizedPacketAttempt(ILogger logger, string clientIp, int length, int maxLength);
 }

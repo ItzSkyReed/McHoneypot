@@ -1,6 +1,6 @@
 ﻿namespace McHoneypot.Adapters.MinecraftProtocol.Packets.Serverbound;
 
-public class HandshakePacket : IServerboundPacket
+public sealed class HandshakePacket : IServerboundPacket
 {
     public int ProtocolVersion { get; set; }
     public string ServerAddress { get; set; } = string.Empty;
