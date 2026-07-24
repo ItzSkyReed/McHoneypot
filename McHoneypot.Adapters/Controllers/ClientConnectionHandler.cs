@@ -199,7 +199,7 @@ public partial class ClientConnectionHandler(
 
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "[!] Dropped oversized packet from: requested {Length} bytes (Max: {MaxLength})")]
-    public static partial void OversizedPacketAttempt(ILogger logger, string clientIp, int length, int maxLength);
+    public static partial void OversizedPacketAttempt(ILogger logger, int length, int maxLength);
 
     [LoggerMessage(
         EventId = 2,
