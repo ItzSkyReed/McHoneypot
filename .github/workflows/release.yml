@@ -16,23 +16,23 @@ jobs:
         target:
           - rid: win-x64
             os: windows-latest
-            artifact_name: app-win-x64.exe
+            archive_name: McHoneypot-win-x64.zip
 
           - rid: linux-x64
             os: ubuntu-latest
-            artifact_name: app-linux-x64
+            archive_name: McHoneypot-linux-x64.tar.gz
 
           - rid: linux-arm64
             os: ubuntu-latest
-            artifact_name: app-linux-arm64
+            archive_name: McHoneypot-linux-arm64.tar.gz
 
           - rid: osx-x64 # macOS Intel (amd64)
             os: macos-latest
-            artifact_name: app-osx-x64
+            archive_name: McHoneypot-osx-x64.tar.gz
 
           - rid: osx-arm64 # macOS Apple Silicon (M1/M2/M3)
             os: macos-latest
-            artifact_name: app-osx-arm64
+            archive_name: McHoneypot-osx-arm64.tar.gz
 
     steps:
       - name: Checkout code
@@ -44,24 +44,17 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Build / Publish project
-        run: |
-          dotnet publish McHoneypot.Infrastructure/McHoneypot.Infrastructure.csproj \
-            -c Release \
-            -r ${{ matrix.target.rid }} \
-            --self-contained true \
-            -p:PublishSingleFile=true \
-            -o ./publish
+        run: dotnet publish McHoneypot.Infrastructure/McHoneypot.Infrastructure.csproj -c Release -r ${{ matrix.target.rid }} -o ./publish
 
       - name: Compress for Windows
         if: matrix.target.os == 'windows-latest'
         shell: pwsh
-        run: |
-          Compress-Archive -Path ./publish/* -DestinationPath ./${{ matrix.target.archive_name }}
+        run: Compress-Archive -Path ./publish/* -DestinationPath ./${{ matrix.target.archive_name }}
 
       - name: Compress for Linux/macOS
         if: matrix.target.os != 'windows-latest'
         run: |
-          tar -czvf ./${{ matrix.target.archive_name }} -C ./publish .
+          tar -czvf "${{ matrix.target.archive_name }}" -C ./publish .
 
       - name: Rename output artifact
         shell: bash
