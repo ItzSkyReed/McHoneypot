@@ -1,4 +1,6 @@
-﻿namespace McHoneypot.Adapters.MinecraftProtocol.Types;
+﻿using System.Buffers;
+
+namespace McHoneypot.Adapters.MinecraftProtocol.Types;
 
 /// <summary>
 /// Represents the VarInt variable-length type from the Minecraft protocol.
@@ -79,6 +81,32 @@ public readonly struct VarInt(int value) : IEquatable<VarInt>
 
         result = new VarInt(res);
         bytesRead = numRead;
+        return true;
+    }
+
+    public static bool TryRead(ref SequenceReader<byte> reader, out int result)
+    {
+        var numRead = 0;
+        result = 0;
+        byte read;
+
+        do
+        {
+            if (!reader.TryRead(out read))
+            {
+                return false;
+            }
+
+            var value = read & 0b01111111;
+            result |= value << (7 * numRead);
+
+            numRead++;
+            if (numRead > 5)
+            {
+                throw new InvalidOperationException("VarInt too big.");
+            }
+        } while ((read & 0b10000000) != 0);
+
         return true;
     }
 

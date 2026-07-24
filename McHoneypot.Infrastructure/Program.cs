@@ -20,7 +20,7 @@ internal static class Program
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.AddConsole();
-            builder.SetMinimumLevel(LogLevel.Information);
+            builder.SetMinimumLevel(LogLevel.Warning);
         });
 
         _logger = loggerFactory.CreateLogger("McHoneypot");

@@ -1,5 +1,5 @@
-﻿using System.Buffers.Binary;
-using McHoneypot.Adapters.MinecraftProtocol.Io;
+﻿using System;
+using System.Buffers;
 using McHoneypot.Adapters.MinecraftProtocol.Packets;
 using McHoneypot.Adapters.MinecraftProtocol.Packets.Serverbound;
 
@@ -7,13 +7,12 @@ namespace McHoneypot.Adapters.MinecraftProtocol.Decoders;
 
 public sealed class PingRequestDecoder : IPacketDecoder
 {
-
     public static readonly PingRequestDecoder Instance = new();
 
-    public IServerboundPacket Decode(ref PacketReader reader)
+    public IServerboundPacket Decode(ref SequenceReader<byte> reader)
     {
-        var payload = reader.ReadLong();
-
-        return new PingRequestPacket(payload);
+        return !reader.TryReadBigEndian(out long payload)
+            ? throw new InvalidOperationException("Not enough data to read Ping payload")
+            : new PingRequestPacket(payload);
     }
 }

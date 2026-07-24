@@ -1,57 +1,99 @@
 ﻿using System.Buffers;
+using System.IO.Pipelines;
+using System.Net.Sockets;
 using McHoneypot.Adapters.MinecraftProtocol;
 using McHoneypot.Adapters.MinecraftProtocol.Io;
 using McHoneypot.Adapters.MinecraftProtocol.Packets;
 using McHoneypot.Adapters.MinecraftProtocol.Packets.Clientbound;
 using McHoneypot.Adapters.MinecraftProtocol.Packets.Serverbound;
+using McHoneypot.Application.Services;
 using McHoneypot.Core.Models;
 using McHoneypot.Core.Models.Configuration;
 
 namespace McHoneypot.Adapters.Controllers;
 
-public sealed class ClientConnectionHandler(ServerConfig config)
+public sealed class ClientConnectionHandler(ServerConfig config, StatusPayloadProvider statusPayloadProvider, Socket socket)
 {
+    private readonly NetworkStream _networkStream = new(socket, ownsSocket: false);
     private ConnectionState _currentState = ConnectionState.Handshaking;
-
     private int _clientProtocolVersion = config.FixedProtocolVersion;
 
-    public async Task HandleStreamAsync(Stream stream, CancellationToken cancellationToken = default)
+    public async Task HandleConnectionAsync(CancellationToken ct = default)
     {
+        var pipe = new Pipe();
+
+        var writing = FillPipeAsync(socket, pipe.Writer, ct);
+        var reading = ReadPipeAsync(pipe.Reader, ct);
+
+        await Task.WhenAll(reading, writing);
+    }
+
+    private static async Task FillPipeAsync(Socket socket, PipeWriter writer, CancellationToken ct)
+    {
+        const int minimumBufferSize = 512;
+
         try
         {
-            while (true)
+            while (!ct.IsCancellationRequested)
             {
-                var packetLength = await stream.ReadVarIntAsync(cancellationToken);
+                var memory = writer.GetMemory(minimumBufferSize);
 
-                if (packetLength > config.MaxClientPacketLength) throw new InvalidDataException("Packet too large");
+                var bytesRead = await socket.ReceiveAsync(memory, SocketFlags.None, ct);
+                if (bytesRead == 0)
+                    break;
 
-                var packetBuffer = ArrayPool<byte>.Shared.Rent(packetLength);
-                try
-                {
-                    await stream.ReadExactlyAsync(packetBuffer, 0, packetLength, cancellationToken);
+                writer.Advance(bytesRead);
 
-                    var packetData = new ReadOnlySpan<byte>(packetBuffer, 0, packetLength);
-                    var reader = new PacketReader(packetData);
+                var result = await writer.FlushAsync(ct);
 
-                    var packetId = reader.ReadVarInt();
-                    var decoder = PacketRegistry.GetDecoder(_currentState, packetId);
-                    if (decoder == null) return;
-
-                    var packet = decoder.Decode(ref reader);
-                    await ProcessPacketAsync(packet, stream, cancellationToken);
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(packetBuffer);
-                }
+                if (result.IsCompleted)
+                    break;
             }
         }
-        catch (EndOfStreamException)
+        finally
         {
+            await writer.CompleteAsync();
         }
     }
 
-    private async Task ProcessPacketAsync(IServerboundPacket packet, Stream networkStream, CancellationToken cancellationToken = default)
+    private async Task ReadPipeAsync(PipeReader reader, CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                var result = await reader.ReadAsync(ct);
+                var buffer = result.Buffer;
+
+                while (MinecraftPacketParser.TryParse(ref buffer, out var packetId, out var payload, out var consumedTo))
+                {
+                    if (PacketRegistry.TryGetDecoder(_currentState, packetId, out var decoder))
+                    {
+                        var payloadReader = new SequenceReader<byte>(payload);
+                        var packet = decoder.Decode(ref payloadReader);
+
+                        await ProcessPacketAsync(packet, ct);
+                    }
+                    else
+                        return;
+
+
+                    buffer = buffer.Slice(consumedTo);
+                }
+
+                reader.AdvanceTo(buffer.Start, buffer.End);
+
+                if (result.IsCompleted)
+                    break;
+            }
+        }
+        finally
+        {
+            await reader.CompleteAsync();
+        }
+    }
+
+    private async Task ProcessPacketAsync(IServerboundPacket packet, CancellationToken cancellationToken)
     {
         switch (packet)
         {
@@ -67,75 +109,45 @@ public sealed class ClientConnectionHandler(ServerConfig config)
                 break;
 
             case StatusRequestPacket:
-                var validJson = $$"""
-                                  {
-                                      "version": {
-                                          "name": "Any Version",
-                                          "protocol": {{_clientProtocolVersion}}
-                                      },
-                                      "players": {
-                                          "max": {{int.MinValue}},
-                                          "online": {{int.MaxValue}},
-                                          "sample": [
-                                              { "name": "Notch", "id": "069a79f4-44e9-4726-a5be-fca90e38aaf5" }
-                                          ]
-                                      },
-                                      "description": {
-                                          "text": "§aHoneyPot Server Test!"
-                                      }
-                                  }
-                                  """;
+                var validJson = statusPayloadProvider.GetPayload(_clientProtocolVersion);
 
                 var responsePacket = new StatusResponsePacket(validJson);
-                await SendPacketAsync(networkStream, responsePacket, cancellationToken);
+                await SendPacketAsync(responsePacket, cancellationToken);
                 break;
 
             case PingRequestPacket ping:
                 var pongPacket = new PongResponsePacket(ping.Payload);
-                await SendPacketAsync(networkStream, pongPacket, cancellationToken);
+                await SendPacketAsync(pongPacket, cancellationToken);
                 break;
         }
     }
 
-    private async Task SendPacketAsync(Stream networkStream, IClientboundPacket packet, CancellationToken cancellationToken)
+    private async Task SendPacketAsync(IClientboundPacket packet, CancellationToken ct)
     {
-        var payloadSize = PacketWriter.GetVarIntSize(packet.PacketId);
-
-        payloadSize += packet switch
+        var payloadSize = packet switch
         {
-            StatusResponsePacket statusPacket => PacketWriter.GetMinecraftStringSize(statusPacket.JsonResponse),
-            PongResponsePacket => 8, // Long всегда занимает 8 байт
-            _ => throw new NotSupportedException($"Unknown packet type: {packet.GetType().Name}")
+            StatusResponsePacket s => PacketWriter.GetVarIntSize(s.PacketId) + PacketWriter.GetMinecraftStringSize(s.JsonResponse),
+            PongResponsePacket p => PacketWriter.GetVarIntSize(p.PacketId) + 8,
+            _ => throw new InvalidOperationException("Undefined packet")
         };
 
-        var totalRequiredSize = payloadSize + 5;
+        var totalSize = PacketWriter.GetVarIntSize(payloadSize) + payloadSize;
 
-        var buffer = ArrayPool<byte>.Shared.Rent(totalRequiredSize);
+
+        var buffer = ArrayPool<byte>.Shared.Rent(totalSize);
 
         try
         {
-            var payloadSpan = buffer.AsSpan(5);
-            var writer = new PacketWriter(payloadSpan);
+            var writer = new PacketWriter(buffer.AsSpan(0, totalSize));
+
+            writer.WriteVarInt(payloadSize);
             writer.WritePacketPayload(packet);
 
-            var headerWriter = new PacketWriter(buffer.AsSpan());
-            headerWriter.WriteVarInt(payloadSize);
-            var headerLength = headerWriter.Position;
-
-
-            if (headerLength < 5)
-                payloadSpan[..payloadSize].CopyTo(buffer.AsSpan(headerLength));
-
-            var finalPacketSize = headerLength + payloadSize;
-            await networkStream.WriteAsync(buffer.AsMemory(0, finalPacketSize), cancellationToken);
+            await _networkStream.WriteAsync(buffer.AsMemory(0, totalSize), ct);
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
-    }
-
-    private void ExecuteTrap(Stream stream)
-    {
     }
 }
