@@ -1,7 +1,13 @@
-﻿namespace McHoneypot.Core.Models.Configuration;
+﻿using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 
+namespace McHoneypot.Core.Models.Configuration;
+
+[JsonConverter(typeof(JsonStringEnumConverter<LogLevel>))]
 public class ServerConfig
 {
+    public LogLevel LogLevel { get; set; } = LogLevel.Information;
+
     public string BindAddress { get; set; } = "0.0.0.0";
     public ushort Port { get; set; } = 25565;
 
@@ -18,7 +24,6 @@ public class ServerConfig
 
     public int MaxPlayers { get; set; } = 1000;
     public int OnlinePlayers { get; set; } = 874;
-
 
     public TrapConfig Trap { get; set; } = new();
 }

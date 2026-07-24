@@ -16,10 +16,10 @@ public static partial class ServerLogs
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "[!] File {ConfigPath} not found. Creating new one...")]
     public static partial void ConfigNotFound(ILogger logger, string configPath);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "[>] Connection from: {ClientIp}")]
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "[>] Connection from: {ClientIp}")]
     public static partial void ClientConnected(ILogger logger, string clientIp);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "[<] Disconnected: {ClientIp}")]
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "[<] Disconnected: {ClientIp}")]
     public static partial void ClientDisconnected(ILogger logger, string clientIp);
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "[X] Error clientIp: {ClientIp}")]
@@ -28,6 +28,4 @@ public static partial class ServerLogs
     [LoggerMessage(EventId = 8, Level = LogLevel.Critical, Message = "[!] Critical Error during server execution.")]
     public static partial void CriticalError(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "[!] Dropped oversized packet from {ClientIp}: requested {Length} bytes (Max: {MaxLength})")]
-    public static partial void OversizedPacketAttempt(ILogger logger, string clientIp, int length, int maxLength);
 }

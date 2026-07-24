@@ -11,6 +11,7 @@ public static class MinecraftPacketParser
     /// </summary>
     public static bool TryParse(
         ref ReadOnlySequence<byte> buffer,
+        int maxPacketLength,
         out int packetId,
         out ReadOnlySequence<byte> payload,
         out SequencePosition consumedTo)
@@ -22,7 +23,10 @@ public static class MinecraftPacketParser
         var reader = new SequenceReader<byte>(buffer);
 
         if (!VarInt.TryRead(ref reader, out var packetLength))
-            return false; // VarInt длины еще не докачался
+            return false;
+
+        if (packetLength > maxPacketLength)
+            throw new InvalidDataException($"Packet length {packetLength} exceeds the maximum allowed length of {maxPacketLength}.");
 
         if (reader.Remaining < packetLength)
             return false;

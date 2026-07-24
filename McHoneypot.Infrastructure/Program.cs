@@ -15,21 +15,26 @@ internal static class Program
     private const string ConfigPath = "config.json";
     private static ServerConfig _config = null!;
     private static ILogger _logger = null!;
+    private static ILogger<ClientConnectionHandler> _handlerLogger = null!;
     private static StatusPayloadProvider _statusPayloadProvider = null!;
+
 
     private static async Task Main()
     {
+        LoadConfiguration();
+
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.AddConsole();
-            builder.SetMinimumLevel(LogLevel.Warning);
+            builder.SetMinimumLevel(_config.LogLevel);
         });
+
 
         _logger = loggerFactory.CreateLogger("McHoneypot");
 
-        ServerLogs.Initializing(_logger);
+        _handlerLogger = loggerFactory.CreateLogger<ClientConnectionHandler>();
 
-        LoadConfiguration();
+        ServerLogs.Initializing(_logger);
 
         var bindAddress = IPAddress.Parse(_config.BindAddress);
         var listener = new TcpListener(bindAddress, _config.Port);
@@ -89,7 +94,7 @@ internal static class Program
             var fakePlayerProvider = new FakePlayerProvider(_config);
             _statusPayloadProvider = new StatusPayloadProvider(_config, fakePlayerProvider);
 
-            var handler = new ClientConnectionHandler(_config, _statusPayloadProvider, client.Client);
+            var handler = new ClientConnectionHandler(_config, _statusPayloadProvider, client.Client, _handlerLogger);
 
             await handler.HandleConnectionAsync();
         }
