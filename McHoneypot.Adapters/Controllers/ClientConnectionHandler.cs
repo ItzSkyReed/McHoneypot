@@ -9,28 +9,53 @@ using McHoneypot.Adapters.MinecraftProtocol.Packets.Serverbound;
 using McHoneypot.Application.Services;
 using McHoneypot.Core.Models;
 using McHoneypot.Core.Models.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace McHoneypot.Adapters.Controllers;
 
-public sealed class ClientConnectionHandler(ServerConfig config, StatusPayloadProvider statusPayloadProvider, Socket socket)
+public partial class ClientConnectionHandler(
+    ServerConfig config,
+    StatusPayloadProvider statusPayloadProvider,
+    Socket socket,
+    ILogger<ClientConnectionHandler> logger)
 {
-    private readonly NetworkStream _networkStream = new(socket, ownsSocket: false);
     private ConnectionState _currentState = ConnectionState.Handshaking;
     private int _clientProtocolVersion = config.FixedProtocolVersion;
 
     public async Task HandleConnectionAsync(CancellationToken ct = default)
     {
-        var pipe = new Pipe();
+        var pipe = new Pipe(new PipeOptions(
+            pauseWriterThreshold: 64 * 1024,
+            resumeWriterThreshold: 32 * 1024,
+            minimumSegmentSize: 512,
+            useSynchronizationContext: false));
 
-        var writing = FillPipeAsync(socket, pipe.Writer, ct);
-        var reading = ReadPipeAsync(pipe.Reader, ct);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        await Task.WhenAll(reading, writing);
+        var writing = FillPipeAsync(socket, pipe.Writer, cts.Token);
+        var reading = ReadPipeAsync(pipe.Reader, cts.Token);
+
+        await Task.WhenAny(reading, writing);
+
+        await cts.CancelAsync();
+
+        try
+        {
+            await Task.WhenAll(reading, writing);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            LogUnexpectedConnectionReset(logger, ex);
+        }
     }
 
     private static async Task FillPipeAsync(Socket socket, PipeWriter writer, CancellationToken ct)
     {
         const int minimumBufferSize = 512;
+        Exception? error = null;
 
         try
         {
@@ -39,6 +64,7 @@ public sealed class ClientConnectionHandler(ServerConfig config, StatusPayloadPr
                 var memory = writer.GetMemory(minimumBufferSize);
 
                 var bytesRead = await socket.ReceiveAsync(memory, SocketFlags.None, ct);
+
                 if (bytesRead == 0)
                     break;
 
@@ -46,18 +72,24 @@ public sealed class ClientConnectionHandler(ServerConfig config, StatusPayloadPr
 
                 var result = await writer.FlushAsync(ct);
 
-                if (result.IsCompleted)
+                if (result.IsCompleted || result.IsCanceled)
                     break;
             }
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            error = ex;
+        }
         finally
         {
-            await writer.CompleteAsync();
+            await writer.CompleteAsync(error);
         }
     }
 
     private async Task ReadPipeAsync(PipeReader reader, CancellationToken ct)
     {
+        Exception? error = null;
+
         try
         {
             while (!ct.IsCancellationRequested)
@@ -65,7 +97,11 @@ public sealed class ClientConnectionHandler(ServerConfig config, StatusPayloadPr
                 var result = await reader.ReadAsync(ct);
                 var buffer = result.Buffer;
 
-                while (MinecraftPacketParser.TryParse(ref buffer, out var packetId, out var payload, out var consumedTo))
+                if (result.IsCanceled)
+                    break;
+
+                while (MinecraftPacketParser.TryParse(ref buffer, config.MaxClientPacketLength, out var packetId, out var payload,
+                           out var consumedTo))
                 {
                     if (PacketRegistry.TryGetDecoder(_currentState, packetId, out var decoder))
                     {
@@ -75,8 +111,10 @@ public sealed class ClientConnectionHandler(ServerConfig config, StatusPayloadPr
                         await ProcessPacketAsync(packet, ct);
                     }
                     else
+                    {
+                        error = new InvalidDataException($"Unknown or invalid packet ID 0x{packetId:X2} in state {_currentState}");
                         return;
-
+                    }
 
                     buffer = buffer.Slice(consumedTo);
                 }
@@ -87,9 +125,17 @@ public sealed class ClientConnectionHandler(ServerConfig config, StatusPayloadPr
                     break;
             }
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            error = ex;
+        }
+        catch
+        {
+
+        }
         finally
         {
-            await reader.CompleteAsync();
+            await reader.CompleteAsync(error);
         }
     }
 
@@ -143,11 +189,21 @@ public sealed class ClientConnectionHandler(ServerConfig config, StatusPayloadPr
             writer.WriteVarInt(payloadSize);
             writer.WritePacketPayload(packet);
 
-            await _networkStream.WriteAsync(buffer.AsMemory(0, totalSize), ct);
+            await socket.SendAsync(buffer.AsMemory(0, totalSize), ct);
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
     }
+
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "[!] Dropped oversized packet from: requested {Length} bytes (Max: {MaxLength})")]
+    public static partial void OversizedPacketAttempt(ILogger logger, string clientIp, int length, int maxLength);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "The connection was unexpectedly reset or an error occurred.")]
+    private static partial void LogUnexpectedConnectionReset(ILogger logger, Exception ex);
 }
