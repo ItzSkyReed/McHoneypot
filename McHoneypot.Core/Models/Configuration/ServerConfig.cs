@@ -5,8 +5,6 @@ namespace McHoneypot.Core.Models.Configuration;
 
 public class ServerConfig
 {
-
-    [JsonConverter(typeof(JsonStringEnumConverter<LogLevel>))]
     public LogLevel LogLevel { get; set; } = LogLevel.Information;
 
     public string BindAddress { get; set; } = "0.0.0.0";

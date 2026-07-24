@@ -47,7 +47,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Build / Publish project
-        run: dotnet publish McHoneypot.Infrastructure/McHoneypot.Infrastructure.csproj -c Release -r ${{ matrix.target.rid }} -o ./publish
+        run: dotnet publish McHoneypot.Infrastructure/McHoneypot.Infrastructure.csproj -c Release -r ${{ matrix.target.rid }} -o ./publish -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false
 
       - name: Rename output artifact
         shell: bash
@@ -62,12 +62,12 @@ jobs:
       - name: Compress for Windows
         if: matrix.target.os == 'windows-latest'
         shell: pwsh
-        run: Compress-Archive -Path ./publish/* -DestinationPath ./${{ matrix.target.archive_name }}
+        run: Compress-Archive -Path ./publish/McHoneypot.exe -DestinationPath ./${{ matrix.target.archive_name }}
 
       - name: Compress for Linux/macOS
         if: matrix.target.os != 'windows-latest'
         run: |
-          tar -czvf "${{ matrix.target.archive_name }}" -C ./publish .
+          tar -czvf "${{ matrix.target.archive_name }}" -C ./publish McHoneypot
 
       - name: Upload artifacts to Release
         uses: softprops/action-gh-release@v3

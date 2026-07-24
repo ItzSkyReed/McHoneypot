@@ -5,7 +5,8 @@ namespace McHoneypot.Infrastructure.Configuration;
 
 [JsonSourceGenerationOptions(
     WriteIndented = true,
-    PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower
+    PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
+    UseStringEnumConverter = true
 )]
 [JsonSerializable(typeof(ServerConfig))]
 [JsonSerializable(typeof(TrapConfig))]

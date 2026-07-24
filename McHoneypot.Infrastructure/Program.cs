@@ -17,7 +17,7 @@ internal static class Program
     private static ILogger _logger = null!;
     private static ILogger<ClientConnectionHandler> _handlerLogger = null!;
     private static StatusPayloadProvider _statusPayloadProvider = null!;
-
+    private static bool _isConfigMissing;
 
     private static async Task Main()
     {
@@ -33,6 +33,9 @@ internal static class Program
         _logger = loggerFactory.CreateLogger("McHoneypot");
 
         _handlerLogger = loggerFactory.CreateLogger<ClientConnectionHandler>();
+
+        if (_isConfigMissing)
+            ServerLogs.ConfigNotFound(_logger, ConfigPath);
 
         ServerLogs.Initializing(_logger);
 
@@ -73,7 +76,7 @@ internal static class Program
         }
         else
         {
-            ServerLogs.ConfigNotFound(_logger, ConfigPath);
+            _isConfigMissing = true;
             _config = new ServerConfig();
 
             var defaultJson = JsonSerializer.Serialize(_config, ConfigJsonContext.Default.ServerConfig);
