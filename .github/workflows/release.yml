@@ -26,11 +26,11 @@ jobs:
             os: ubuntu-latest
             archive_name: McHoneypot-linux-arm64.tar.gz
 
-          - rid: osx-x64 # macOS Intel (amd64)
+          - rid: osx-x64
             os: macos-latest
             archive_name: McHoneypot-osx-x64.tar.gz
 
-          - rid: osx-arm64 # macOS Apple Silicon (M1/M2/M3)
+          - rid: osx-arm64
             os: macos-latest
             archive_name: McHoneypot-osx-arm64.tar.gz
 
@@ -46,6 +46,16 @@ jobs:
       - name: Build / Publish project
         run: dotnet publish McHoneypot.Infrastructure/McHoneypot.Infrastructure.csproj -c Release -r ${{ matrix.target.rid }} -o ./publish
 
+      - name: Rename output artifact
+        shell: bash
+        run: |
+          cd ./publish
+          if [ "${{ matrix.target.os }}" = "windows-latest" ]; then
+            mv McHoneypot.Infrastructure.exe McHoneypot.exe
+          else
+            mv McHoneypot.Infrastructure McHoneypot
+          fi
+
       - name: Compress for Windows
         if: matrix.target.os == 'windows-latest'
         shell: pwsh
@@ -56,20 +66,9 @@ jobs:
         run: |
           tar -czvf "${{ matrix.target.archive_name }}" -C ./publish .
 
-      - name: Rename output artifact
-        shell: bash
-        run: |
-          cd ./publish
-
-          if [ "${{ matrix.target.os }}" = "windows-latest" ]; then
-            mv McHoneypot.Infrastructure.exe ${{ matrix.target.artifact_name }}
-          else
-            mv McHoneypot.Infrastructure ${{ matrix.target.artifact_name }}
-          fi
-
       - name: Upload artifacts to Release
         uses: softprops/action-gh-release@v3
         with:
-          files: ./publish/${{ matrix.target.artifact_name }}
+          files: ./${{ matrix.target.archive_name }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECRET_TOKEN }}
