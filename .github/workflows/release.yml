@@ -26,7 +26,7 @@ jobs:
             archive_name: McHoneypot-linux-x64.tar.gz
 
           - rid: linux-arm64
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm
             archive_name: McHoneypot-linux-arm64.tar.gz
 
           - rid: osx-x64
