@@ -1,9 +1,7 @@
-﻿using System.Buffers;
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Text;
 using McHoneypot.Adapters.MinecraftProtocol.Packets;
 using McHoneypot.Adapters.MinecraftProtocol.Packets.Clientbound;
-using McHoneypot.Adapters.MinecraftProtocol.Types;
 
 namespace McHoneypot.Adapters.MinecraftProtocol.Io;
 

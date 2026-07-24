@@ -2,6 +2,7 @@
 using System.Net.Sockets;
 using System.Text.Json;
 using McHoneypot.Adapters.Controllers;
+using McHoneypot.Application.Services;
 using McHoneypot.Core.Models.Configuration;
 using McHoneypot.Infrastructure.Configuration;
 using McHoneypot.Infrastructure.Logging;
@@ -14,6 +15,7 @@ internal static class Program
     private const string ConfigPath = "config.json";
     private static ServerConfig _config = null!;
     private static ILogger _logger = null!;
+    private static StatusPayloadProvider _statusPayloadProvider = null!;
 
     private static async Task Main()
     {
@@ -58,23 +60,16 @@ internal static class Program
 
     private static void LoadConfiguration()
     {
-        var jsonSerializerOptions = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            TypeInfoResolver = ConfigJsonContext.Default
-        };
-
         if (File.Exists(ConfigPath))
         {
             var json = File.ReadAllText(ConfigPath);
-
-            _config = JsonSerializer.Deserialize(json, ConfigJsonContext.Default.ServerConfig) ?? new ServerConfig();
+            _config = JsonSerializer.Deserialize(json, ConfigJsonContext.Default.ServerConfig)
+                      ?? new ServerConfig();
         }
         else
         {
             ServerLogs.ConfigNotFound(_logger, ConfigPath);
             _config = new ServerConfig();
-
 
             var defaultJson = JsonSerializer.Serialize(_config, ConfigJsonContext.Default.ServerConfig);
             File.WriteAllText(ConfigPath, defaultJson);
@@ -91,10 +86,12 @@ internal static class Program
             client.ReceiveTimeout = _config.TimeoutMs;
             client.SendTimeout = _config.TimeoutMs;
 
-            await using var stream = client.GetStream();
-            var handler = new ClientConnectionHandler(_config);
+            var fakePlayerProvider = new FakePlayerProvider(_config);
+            _statusPayloadProvider = new StatusPayloadProvider(_config, fakePlayerProvider);
 
-            await handler.HandleStreamAsync(stream);
+            var handler = new ClientConnectionHandler(_config, _statusPayloadProvider, client.Client);
+
+            await handler.HandleConnectionAsync();
         }
         catch (EndOfStreamException)
         {

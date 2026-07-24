@@ -1,8 +1,10 @@
-﻿namespace McHoneypot.Core.Models.Configuration;
+﻿using System.Text.Json.Serialization;
 
+namespace McHoneypot.Core.Models.Configuration;
+
+[JsonConverter(typeof(JsonStringEnumConverter<ProtocolMode>))]
 public enum ProtocolMode
 {
     Chameleon, // Dynamically adjusts to the client version
-    Fixed,     // Strictly responds with the specified version
-    Default    // Standard behavior (e.g., always return 1.20.4)
+    Fixed     // Strictly responds with the specified version
 }
