@@ -16,7 +16,6 @@ public class FakePlayerProvider(ServerConfig config)
         if (trapConfig.FakePlayersCount <= 0)
             return "[]";
 
-        var random = new Random();
         var playersList = new List<FakePlayerItem>(trapConfig.FakePlayersCount);
 
 
@@ -30,9 +29,9 @@ public class FakePlayerProvider(ServerConfig config)
         {
             attempts++;
 
-            var baseName = trapConfig.BaseNames[random.Next(trapConfig.BaseNames.Count)];
-            var prefix = random.Next(2) == 0 ? trapConfig.Prefixes[random.Next(trapConfig.Prefixes.Count)] : "";
-            var suffix = random.Next(2) == 0 ? trapConfig.Suffixes[random.Next(trapConfig.Suffixes.Count)] : "";
+            var baseName = trapConfig.BaseNames[Random.Shared.Next(trapConfig.BaseNames.Count)];
+            var prefix = Random.Shared.Next(2) == 0 ? trapConfig.Prefixes[Random.Shared.Next(trapConfig.Prefixes.Count)] : "";
+            var suffix = Random.Shared.Next(2) == 0 ? trapConfig.Suffixes[Random.Shared.Next(trapConfig.Suffixes.Count)] : "";
 
             var fullName = $"{prefix}{baseName}{suffix}";
 
