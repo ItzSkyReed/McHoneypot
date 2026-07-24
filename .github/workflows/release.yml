@@ -1,0 +1,82 @@
+﻿name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.target.rid }}
+    runs-on: ${{ matrix.target.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - rid: win-x64
+            os: windows-latest
+            artifact_name: app-win-x64.exe
+
+          - rid: linux-x64
+            os: ubuntu-latest
+            artifact_name: app-linux-x64
+
+          - rid: linux-arm64
+            os: ubuntu-latest
+            artifact_name: app-linux-arm64
+
+          - rid: osx-x64 # macOS Intel (amd64)
+            os: macos-latest
+            artifact_name: app-osx-x64
+
+          - rid: osx-arm64 # macOS Apple Silicon (M1/M2/M3)
+            os: macos-latest
+            artifact_name: app-osx-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build / Publish project
+        run: |
+          dotnet publish McHoneypot.Infrastructure/McHoneypot.Infrastructure.csproj \
+            -c Release \
+            -r ${{ matrix.target.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -o ./publish
+
+      - name: Compress for Windows
+        if: matrix.target.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ./publish/* -DestinationPath ./${{ matrix.target.archive_name }}
+
+      - name: Compress for Linux/macOS
+        if: matrix.target.os != 'windows-latest'
+        run: |
+          tar -czvf ./${{ matrix.target.archive_name }} -C ./publish .
+
+      - name: Rename output artifact
+        shell: bash
+        run: |
+          cd ./publish
+
+          if [ "${{ matrix.target.os }}" = "windows-latest" ]; then
+            mv McHoneypot.Infrastructure.exe ${{ matrix.target.artifact_name }}
+          else
+            mv McHoneypot.Infrastructure ${{ matrix.target.artifact_name }}
+          fi
+
+      - name: Upload artifacts to Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ./publish/${{ matrix.target.artifact_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
