@@ -23,12 +23,12 @@ public partial class ClientConnectionHandler(
 {
     private ConnectionState _currentState = ConnectionState.Handshaking;
     private int _clientProtocolVersion = config.FixedProtocolVersion;
-    private string ClientIp = "Unknown IP";
+    private string _clientIp = "Unknown IP";
 
     public async Task HandleConnectionAsync(CancellationToken ct = default)
     {
         if (socket.RemoteEndPoint is IPEndPoint remoteEndPoint)
-            ClientIp = remoteEndPoint.Address.ToString();
+            _clientIp = remoteEndPoint.Address.ToString();
 
 
         var pipe = new Pipe(new PipeOptions(
@@ -152,7 +152,7 @@ public partial class ClientConnectionHandler(
         {
             case HandshakePacket handshake:
 
-                LogHandshake(logger, ClientIp, handshake.ProtocolVersion, handshake.ServerAddress, handshake.ServerPort);
+                LogHandshake(logger, _clientIp, handshake.ProtocolVersion, handshake.ServerAddress, handshake.ServerPort);
 
                 _currentState = (ConnectionState)handshake.Intent;
 
@@ -253,12 +253,12 @@ public partial class ClientConnectionHandler(
             }
 
             stopwatch.Stop();
-            LogTarpitCompleted(logger, ClientIp, stopwatch.Elapsed.TotalSeconds);
+            LogTarpitCompleted(logger, _clientIp, stopwatch.Elapsed.TotalSeconds);
         }
         catch (Exception ex) when (ex is SocketException or IOException or OperationCanceledException)
         {
             stopwatch.Stop();
-            LogTarpitDropped(logger, ClientIp, stopwatch.Elapsed.TotalSeconds);
+            LogTarpitDropped(logger, _clientIp, stopwatch.Elapsed.TotalSeconds);
         }
     }
 
