@@ -14,7 +14,7 @@ public static class OfflinePlayerGenerator
         hash[6] = (byte)(hash[6] & 0x0f | 0x30);
         hash[8] = (byte)(hash[8] & 0x3f | 0x80);
 
-        var uuid = new Guid(hash);
+        var uuid = new Guid(hash, true);
 
         return (playerName, uuid.ToString());
     }
