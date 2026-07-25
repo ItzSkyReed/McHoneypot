@@ -166,18 +166,17 @@ public partial class ClientConnectionHandler(
 
             case StatusRequestPacket:
                 var validJson = statusPayloadProvider.GetPayload(_clientProtocolVersion);
-
                 var responsePacket = new StatusResponsePacket(validJson);
-                await SendPacketAsync(responsePacket, cancellationToken);
+
+                if (config.Trap.EnableTarpit)
+                    await SendTarpitPacketAsync(responsePacket, cancellationToken);
+                else
+                    await SendPacketAsync(responsePacket, cancellationToken);
                 break;
 
             case PingRequestPacket ping:
                 var pongPacket = new PongResponsePacket(ping.Payload);
-
-                if (config.Trap.EnableTarpit)
-                    await SendTarpitPacketAsync(pongPacket, cancellationToken);
-                else
-                    await SendPacketAsync(pongPacket, cancellationToken);
+                await SendPacketAsync(pongPacket, cancellationToken);
                 break;
         }
     }
