@@ -28,4 +28,7 @@ public static partial class ServerLogs
     [LoggerMessage(EventId = 8, Level = LogLevel.Critical, Message = "[!] Critical Error during server execution.")]
     public static partial void CriticalError(ILogger logger, Exception ex);
 
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning,
+        Message = "[!] Status Response payload length is longer than {MaxPayloadLength}. Current payload length: {PayloadLength}.")]
+    public static partial void PayloadTooLong(ILogger logger, int maxPayloadLength, int payloadLength);
 }

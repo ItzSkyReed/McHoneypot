@@ -13,6 +13,8 @@ namespace McHoneypot.Infrastructure;
 internal static class Program
 {
     private const string ConfigPath = "config.json";
+    private const int MaxPayloadLength = 32767;
+
     private static ServerConfig _config = null!;
     private static ILogger _logger = null!;
     private static ILogger<ClientConnectionHandler> _handlerLogger = null!;
@@ -41,6 +43,15 @@ internal static class Program
 
         var bindAddress = IPAddress.Parse(_config.BindAddress);
         var listener = new TcpListener(bindAddress, _config.Port);
+
+
+        var fakePlayerProvider = new FakePlayerProvider(_config);
+        _statusPayloadProvider = new StatusPayloadProvider(_config, fakePlayerProvider);
+
+        var payloadLength = _statusPayloadProvider.GetPayload(_config.FixedProtocolVersion).Length;
+
+        if (payloadLength > MaxPayloadLength)
+            ServerLogs.PayloadTooLong(_logger, MaxPayloadLength, payloadLength);
 
         try
         {
@@ -94,8 +105,6 @@ internal static class Program
             client.ReceiveTimeout = _config.TimeoutMs;
             client.SendTimeout = _config.TimeoutMs;
 
-            var fakePlayerProvider = new FakePlayerProvider(_config);
-            _statusPayloadProvider = new StatusPayloadProvider(_config, fakePlayerProvider);
 
             var handler = new ClientConnectionHandler(_config, _statusPayloadProvider, client.Client, _handlerLogger);
 
