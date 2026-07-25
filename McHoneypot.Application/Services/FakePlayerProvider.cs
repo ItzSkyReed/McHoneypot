@@ -5,7 +5,6 @@ using McHoneypot.Core.Models.Configuration;
 
 namespace McHoneypot.Application.Services;
 
-
 public class FakePlayerProvider(ServerConfig config)
 {
     public string CachedSampleJson { get; } = GenerateCachedJson(config.Trap);
@@ -17,9 +16,7 @@ public class FakePlayerProvider(ServerConfig config)
 
         var playersList = new List<FakePlayerItem>(trapConfig.FakePlayersCount);
 
-
         var generatedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
 
         var maxAttempts = trapConfig.FakePlayersCount * 10;
         var attempts = 0;
