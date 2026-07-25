@@ -2,17 +2,15 @@
 
 public class TrapConfig
 {
-    // Количество фейковых игроков, которых мы будем генерировать в ответе
     public int FakePlayersCount { get; set; } = 100;
 
-    // Включает режим "смоляной ямы" (Tarpit) для замедления ответов
     public bool EnableTarpit { get; set; } = true;
 
-    // Задержка перед отправкой первого байта ответа (в миллисекундах)
     public int InitialDelayMs { get; set; } = 5000;
 
-    // Искусственное ограничение скорости ответа (байт в секунду).
-    // Заставит сканер атакующего читать наш короткий JSON-ответ целую вечность.
+
+    // Artificially limit the response rate (bytes per second).
+    // Will force the attacker's scanner to read our short JSON response forever.
     public int MaxBytesPerSecond { get; set; } = 5;
 
     public List<string> BaseNames { get; set; } =

@@ -1,5 +1,7 @@
 ﻿using System.Buffers;
+using System.Diagnostics;
 using System.IO.Pipelines;
+using System.Net;
 using System.Net.Sockets;
 using McHoneypot.Adapters.MinecraftProtocol;
 using McHoneypot.Adapters.MinecraftProtocol.Io;
@@ -21,9 +23,14 @@ public partial class ClientConnectionHandler(
 {
     private ConnectionState _currentState = ConnectionState.Handshaking;
     private int _clientProtocolVersion = config.FixedProtocolVersion;
+    private string ClientIp = "Unknown IP";
 
     public async Task HandleConnectionAsync(CancellationToken ct = default)
     {
+        if (socket.RemoteEndPoint is IPEndPoint remoteEndPoint)
+            ClientIp = remoteEndPoint.Address.ToString();
+
+
         var pipe = new Pipe(new PipeOptions(
             pauseWriterThreshold: 64 * 1024,
             resumeWriterThreshold: 32 * 1024,
@@ -131,7 +138,6 @@ public partial class ClientConnectionHandler(
         }
         catch
         {
-
         }
         finally
         {
@@ -139,11 +145,15 @@ public partial class ClientConnectionHandler(
         }
     }
 
+
     private async Task ProcessPacketAsync(IServerboundPacket packet, CancellationToken cancellationToken)
     {
         switch (packet)
         {
             case HandshakePacket handshake:
+
+                LogHandshake(logger, ClientIp, handshake.ProtocolVersion, handshake.ServerAddress, handshake.ServerPort);
+
                 _currentState = (ConnectionState)handshake.Intent;
 
                 _clientProtocolVersion = config.ProtocolBehavior switch
@@ -163,37 +173,93 @@ public partial class ClientConnectionHandler(
 
             case PingRequestPacket ping:
                 var pongPacket = new PongResponsePacket(ping.Payload);
-                await SendPacketAsync(pongPacket, cancellationToken);
+
+                if (config.Trap.EnableTarpit)
+                    await SendTarpitPacketAsync(pongPacket, cancellationToken);
+                else
+                    await SendPacketAsync(pongPacket, cancellationToken);
                 break;
         }
     }
 
-    private async Task SendPacketAsync(IClientboundPacket packet, CancellationToken ct)
+
+    private static (int PayloadSize, int TotalSize) GetPacketSizes(IClientboundPacket packet)
     {
         var payloadSize = packet switch
         {
             StatusResponsePacket s => PacketWriter.GetVarIntSize(s.PacketId) + PacketWriter.GetMinecraftStringSize(s.JsonResponse),
             PongResponsePacket p => PacketWriter.GetVarIntSize(p.PacketId) + 8,
-            _ => throw new InvalidOperationException("Undefined packet")
+            _ => throw new InvalidOperationException($"Undefined packet type: {packet.GetType().Name}")
         };
 
         var totalSize = PacketWriter.GetVarIntSize(payloadSize) + payloadSize;
+        return (payloadSize, totalSize);
+    }
 
+    private static void SerializePacketToSpan(IClientboundPacket packet, int payloadSize, Span<byte> buffer)
+    {
+        var writer = new PacketWriter(buffer);
+        writer.WriteVarInt(payloadSize);
+        writer.WritePacketPayload(packet);
+    }
 
+    private async Task SendPacketAsync(IClientboundPacket packet, CancellationToken ct)
+    {
+        var (payloadSize, totalSize) = GetPacketSizes(packet);
         var buffer = ArrayPool<byte>.Shared.Rent(totalSize);
 
         try
         {
-            var writer = new PacketWriter(buffer.AsSpan(0, totalSize));
-
-            writer.WriteVarInt(payloadSize);
-            writer.WritePacketPayload(packet);
+            SerializePacketToSpan(packet, payloadSize, buffer.AsSpan(0, totalSize));
 
             await socket.SendAsync(buffer.AsMemory(0, totalSize), ct);
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private async Task SendTarpitPacketAsync(IClientboundPacket packet, CancellationToken cancellationToken)
+    {
+        var (payloadSize, totalSize) = GetPacketSizes(packet);
+
+
+        var buffer = new byte[totalSize];
+
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            SerializePacketToSpan(packet, payloadSize, buffer);
+
+            if (config.Trap is { EnableTarpit: true, InitialDelayMs: > 0 })
+                await Task.Delay(config.Trap.InitialDelayMs, cancellationToken);
+
+            if (!config.Trap.EnableTarpit || config.Trap.MaxBytesPerSecond <= 0)
+            {
+                await socket.SendAsync(buffer, SocketFlags.None, cancellationToken);
+                return;
+            }
+
+            var delayPerByteMs = 1000 / config.Trap.MaxBytesPerSecond;
+
+            for (var i = 0; i < buffer.Length; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                await socket.SendAsync(buffer.AsMemory(i, 1), SocketFlags.None, cancellationToken);
+
+                await Task.Delay(delayPerByteMs, cancellationToken);
+            }
+
+            stopwatch.Stop();
+            LogTarpitCompleted(logger, ClientIp, stopwatch.Elapsed.TotalSeconds);
+        }
+        catch (Exception ex) when (ex is SocketException or IOException or OperationCanceledException)
+        {
+            stopwatch.Stop();
+            LogTarpitDropped(logger, ClientIp, stopwatch.Elapsed.TotalSeconds);
         }
     }
 
@@ -206,4 +272,24 @@ public partial class ClientConnectionHandler(
         Level = LogLevel.Warning,
         Message = "The connection was unexpectedly reset or an error occurred.")]
     private static partial void LogUnexpectedConnectionReset(ILogger logger, Exception ex);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Information,
+        Message = "[{IpAddress}] Handshake: Protocol={ProtocolVersion}, Address='{ServerAddress}', Port={Port})")
+    ]
+    private static partial void LogHandshake(ILogger logger, string ipAddress, int protocolVersion, string serverAddress, ushort port);
+
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Information,
+        Message = "[{IpAddress}] The scanner has fallen out of the tarpit. Held for {Seconds:F2} sec.")]
+    private static partial void LogTarpitDropped(ILogger logger, string ipAddress, double seconds);
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Information,
+        Message = "[{IpAddress}] Tarpit completed (data sent). Scanner hung for {Seconds:F2} sec.")]
+    private static partial void LogTarpitCompleted(ILogger logger, string ipAddress, double seconds);
 }
