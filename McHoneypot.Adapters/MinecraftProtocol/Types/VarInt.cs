@@ -93,18 +93,14 @@ public readonly struct VarInt(int value) : IEquatable<VarInt>
         do
         {
             if (!reader.TryRead(out read))
-            {
                 return false;
-            }
 
             var value = read & 0b01111111;
             result |= value << (7 * numRead);
 
             numRead++;
             if (numRead > 5)
-            {
                 throw new InvalidOperationException("VarInt too big.");
-            }
         } while ((read & 0b10000000) != 0);
 
         return true;
@@ -123,9 +119,7 @@ public readonly struct VarInt(int value) : IEquatable<VarInt>
             var temp = (byte)(val & 0x7F);
             val >>= 7;
             if (val != 0)
-            {
                 temp |= 0x80;
-            }
 
             buffer[bytesWritten] = temp;
             bytesWritten++;

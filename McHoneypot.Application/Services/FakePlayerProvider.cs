@@ -5,10 +5,9 @@ using McHoneypot.Core.Models.Configuration;
 
 namespace McHoneypot.Application.Services;
 
-// Этот класс должен быть зарегистрирован как Singleton в DI контейнере
+
 public class FakePlayerProvider(ServerConfig config)
 {
-    // Здесь мы храним уже готовый кусок JSON-а
     public string CachedSampleJson { get; } = GenerateCachedJson(config.Trap);
 
     private static string GenerateCachedJson(TrapConfig trapConfig)
