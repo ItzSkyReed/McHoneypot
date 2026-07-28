@@ -31,4 +31,8 @@ public static partial class ServerLogs
     [LoggerMessage(EventId = 9, Level = LogLevel.Warning,
         Message = "[!] Status Response payload length is longer than {MaxPayloadLength}. Current payload length: {PayloadLength}.")]
     public static partial void PayloadTooLong(ILogger logger, int maxPayloadLength, int payloadLength);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Information,
+        Message = "The configuration file was automatically updated. New fields were added:\n{AddedProperties}")]
+    public static partial void ConfigurationUpdated(ILogger logger, string addedProperties);
 }

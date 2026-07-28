@@ -1,22 +1,19 @@
-﻿using System.Text.Json;
-using McHoneypot.Application.Services;
-using McHoneypot.Core.Models.Configuration;
+﻿using McHoneypot.Application.Services;
 using McHoneypot.Infrastructure.Configuration;
+using McHoneypot.Infrastructure.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace McHoneypot.Infrastructure;
 
-internal static class Program
+internal class Program
 {
-    private const string ConfigPath = "config.json";
-
     private static async Task Main(string[] args)
     {
         var builder = Host.CreateApplicationBuilder(args);
 
-        var config = LoadConfiguration();
+        var config = ConfigManager.Load("config.json", out var addedProperties);
 
         builder.Logging.ClearProviders();
         builder.Logging.AddConsole();
@@ -29,22 +26,16 @@ internal static class Program
         builder.Services.AddHostedService<HoneypotBackgroundService>();
 
         var host = builder.Build();
-        await host.RunAsync();
-    }
 
-    private static ServerConfig LoadConfiguration()
-    {
-        if (File.Exists(ConfigPath))
+        if (addedProperties.Count > 0)
         {
-            var json = File.ReadAllText(ConfigPath);
-            return JsonSerializer.Deserialize(json, ConfigJsonContext.Default.ServerConfig)
-                   ?? new ServerConfig();
+            var logger = host.Services.GetRequiredService<ILogger<Program>>();
+
+            var formattedProps = string.Join("\n", addedProperties.Select(p => $"  + {p}"));
+
+            ServerLogs.ConfigurationUpdated(logger, formattedProps);
         }
 
-        var defaultConfig = new ServerConfig();
-        var defaultJson = JsonSerializer.Serialize(defaultConfig, ConfigJsonContext.Default.ServerConfig);
-        File.WriteAllText(ConfigPath, defaultJson);
-
-        return defaultConfig;
+        await host.RunAsync();
     }
 }
