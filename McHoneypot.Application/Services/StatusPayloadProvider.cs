@@ -9,62 +9,61 @@ public class StatusPayloadProvider
 
     private readonly string? _cachedFullJson;
 
+
     public StatusPayloadProvider(ServerConfig config, FakePlayerProvider fakePlayers)
     {
-        if (config.ProtocolBehavior == ProtocolMode.Chameleon)
+        if (config.ProtocolBehavior != ProtocolMode.Fixed)
         {
             _jsonPrefix = $$"""
-                          {
-                              "version": {
-                                  "name": "{{config.VersionName}}",
-                                  "protocol":
-                          """;
+                            {
+                                "version": {
+                                    "name": "{{config.VersionName}}",
+                                    "protocol":
+                            """;
 
             _jsonSuffix = $$"""
-                          
-                              },
-                              "players": {
-                                  "max": {{config.MaxPlayers}},
-                                  "online": {{config.OnlinePlayers}},
-                                  "sample": {{fakePlayers.CachedSampleJson}}
-                              },
-                              "description": {
-                                  "text": "{{config.Description}}"
-                              }
-                          }
-                          """;
+
+                                },
+                                "players": {
+                                    "max": {{config.MaxPlayers}},
+                                    "online": {{config.OnlinePlayers}},
+                                    "sample": {{fakePlayers.CachedSampleJson}}
+                                },
+                                "description": {
+                                    "text": "{{config.Description}}"
+                                }
+                            }
+                            """;
         }
         else
         {
             _cachedFullJson = $$"""
-                              {
-                                  "version": {
-                                      "name": "{{config.VersionName}}",
-                                      "protocol": {{config.FixedProtocolVersion}}
-                                  },
-                                  "players": {
-                                      "max": {{config.MaxPlayers}},
-                                      "online": {{config.OnlinePlayers}},
-                                      "sample": {{fakePlayers.CachedSampleJson}}
-                                  },
-                                  "description": {
-                                      "text": "{{config.Description}}"
-                                  }
-                              }
-                              """;
+                                {
+                                    "version": {
+                                        "name": "{{config.VersionName}}",
+                                        "protocol": {{config.FixedProtocolVersion}}
+                                    },
+                                    "players": {
+                                        "max": {{config.MaxPlayers}},
+                                        "online": {{config.OnlinePlayers}},
+                                        "sample": {{fakePlayers.CachedSampleJson}}
+                                    },
+                                    "description": {
+                                        "text": "{{config.Description}}"
+                                    }
+                                }
+                                """;
         }
     }
 
-    public string GetPayload(int clientProtocolVersion)
+    public string GetPayload(in ServerConfig config)
     {
-
-        if (_cachedFullJson != null)
-            return _cachedFullJson;
-
-        return string.Concat(
-            _jsonPrefix,
-            clientProtocolVersion.ToString(),
-            _jsonSuffix
-        );
+        return config.ProtocolBehavior switch
+        {
+            ProtocolMode.Fixed => _cachedFullJson!,
+            ProtocolMode.Random => string.Concat(_jsonPrefix, Random.Shared.Next(
+                config.MinRandomProtocolVersion, config.MaxRandomProtocolVersion).ToString(), _jsonSuffix),
+            _ => string.Concat(_jsonPrefix, config.FixedProtocolVersion.ToString(), _jsonSuffix)
+        };
     }
 }

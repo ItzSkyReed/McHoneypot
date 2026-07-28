@@ -10,13 +10,16 @@ public class ServerConfig
     public ushort Port { get; set; } = 25565;
 
     public string VersionName { get; set; } = "Paper 1.20.4";
-    public string Description { get; set; } = "§aVanilla Survival §c[1.20.4]§r\n§eWelcome!";
+    public string Description { get; set; } = "§aVanilla Survival §c[1.20.4]";
 
 
     public int TimeoutMs { get; set; } = 10000;
 
     public ProtocolMode ProtocolBehavior { get; set; } = ProtocolMode.Chameleon;
     public int FixedProtocolVersion { get; set; } = 765; // 1.20.4 by default
+
+    public int MinRandomProtocolVersion { get; set; } = 1;
+    public int MaxRandomProtocolVersion { get; set; } = 776;
 
     public int MaxClientPacketLength { get; set; } = 65536;
 
