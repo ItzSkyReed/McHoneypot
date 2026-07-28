@@ -1,11 +1,9 @@
-﻿using System.Net;
-using System.Net.Sockets;
-using System.Text.Json;
-using McHoneypot.Adapters.Controllers;
+﻿using System.Text.Json;
 using McHoneypot.Application.Services;
 using McHoneypot.Core.Models.Configuration;
 using McHoneypot.Infrastructure.Configuration;
-using McHoneypot.Infrastructure.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace McHoneypot.Infrastructure;
@@ -13,114 +11,40 @@ namespace McHoneypot.Infrastructure;
 internal static class Program
 {
     private const string ConfigPath = "config.json";
-    private const int MaxPayloadLength = 32767;
 
-    private static ServerConfig _config = null!;
-    private static ILogger _logger = null!;
-    private static ILogger<ClientConnectionHandler> _handlerLogger = null!;
-    private static StatusPayloadProvider _statusPayloadProvider = null!;
-    private static bool _isConfigMissing;
-
-    private static async Task Main()
+    private static async Task Main(string[] args)
     {
-        LoadConfiguration();
+        var builder = Host.CreateApplicationBuilder(args);
 
-        using var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddConsole();
-            builder.SetMinimumLevel(_config.LogLevel);
-        });
+        var config = LoadConfiguration();
 
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConsole();
+        builder.Logging.SetMinimumLevel(config.LogLevel);
 
-        _logger = loggerFactory.CreateLogger("McHoneypot");
+        builder.Services.AddSingleton(config);
+        builder.Services.AddSingleton<FakePlayerProvider>();
+        builder.Services.AddSingleton<StatusPayloadProvider>();
 
-        _handlerLogger = loggerFactory.CreateLogger<ClientConnectionHandler>();
+        builder.Services.AddHostedService<HoneypotBackgroundService>();
 
-        if (_isConfigMissing)
-            ServerLogs.ConfigNotFound(_logger, ConfigPath);
-
-        ServerLogs.Initializing(_logger);
-
-        var bindAddress = IPAddress.Parse(_config.BindAddress);
-        var listener = new TcpListener(bindAddress, _config.Port);
-
-
-        var fakePlayerProvider = new FakePlayerProvider(_config);
-        _statusPayloadProvider = new StatusPayloadProvider(_config, fakePlayerProvider);
-
-        var payloadLength = _statusPayloadProvider.GetPayload(_config.FixedProtocolVersion).Length;
-
-        if (payloadLength > MaxPayloadLength)
-            ServerLogs.PayloadTooLong(_logger, MaxPayloadLength, payloadLength);
-
-        try
-        {
-            listener.Start();
-
-            ServerLogs.ServerStarted(_logger, _config.BindAddress, _config.Port);
-            ServerLogs.ProtocolMode(_logger, _config.ProtocolBehavior.ToString());
-
-            while (true)
-            {
-                var client = await listener.AcceptTcpClientAsync();
-
-                _ = HandleClientAsync(client);
-            }
-        }
-        catch (Exception ex)
-        {
-            ServerLogs.CriticalError(_logger, ex);
-        }
-        finally
-        {
-            listener.Stop();
-        }
+        var host = builder.Build();
+        await host.RunAsync();
     }
 
-    private static void LoadConfiguration()
+    private static ServerConfig LoadConfiguration()
     {
         if (File.Exists(ConfigPath))
         {
             var json = File.ReadAllText(ConfigPath);
-            _config = JsonSerializer.Deserialize(json, ConfigJsonContext.Default.ServerConfig)
-                      ?? new ServerConfig();
+            return JsonSerializer.Deserialize(json, ConfigJsonContext.Default.ServerConfig)
+                   ?? new ServerConfig();
         }
-        else
-        {
-            _isConfigMissing = true;
-            _config = new ServerConfig();
 
-            var defaultJson = JsonSerializer.Serialize(_config, ConfigJsonContext.Default.ServerConfig);
-            File.WriteAllText(ConfigPath, defaultJson);
-        }
-    }
+        var defaultConfig = new ServerConfig();
+        var defaultJson = JsonSerializer.Serialize(defaultConfig, ConfigJsonContext.Default.ServerConfig);
+        File.WriteAllText(ConfigPath, defaultJson);
 
-    private static async Task HandleClientAsync(TcpClient client)
-    {
-        var clientIp = client.Client.RemoteEndPoint?.ToString() ?? "Unknown";
-        ServerLogs.ClientConnected(_logger, clientIp);
-
-        try
-        {
-            client.ReceiveTimeout = _config.TimeoutMs;
-            client.SendTimeout = _config.TimeoutMs;
-
-
-            var handler = new ClientConnectionHandler(_config, _statusPayloadProvider, client.Client, _handlerLogger);
-
-            await handler.HandleConnectionAsync();
-        }
-        catch (EndOfStreamException)
-        {
-        }
-        catch (Exception ex)
-        {
-            ServerLogs.ClientError(_logger, ex, clientIp);
-        }
-        finally
-        {
-            client.Close();
-            ServerLogs.ClientDisconnected(_logger, clientIp);
-        }
+        return defaultConfig;
     }
 }

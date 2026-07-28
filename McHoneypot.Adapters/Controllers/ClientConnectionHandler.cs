@@ -165,7 +165,7 @@ public partial class ClientConnectionHandler(
                 break;
 
             case StatusRequestPacket:
-                var validJson = statusPayloadProvider.GetPayload(_clientProtocolVersion);
+                var validJson = statusPayloadProvider.GetPayload(config);
                 var responsePacket = new StatusResponsePacket(validJson);
 
                 if (config.Trap.EnableTarpit)
